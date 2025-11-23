@@ -1,0 +1,46 @@
+[project]
+name = "django-llm-chat"
+version = "0.1.0"
+description = "Django app for chatting with LLMs using persistent messages, auto retry, and throttling."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "django>=5.2.8",
+    "litellm>=1.80.0",
+]
+license = "BSD-3-Clause"
+authors = [{ name = "Mikaeil Orfanian", email = "subsmokt@outlook.com" }]
+classifiers = [
+  "Environment :: Web Environment",
+  "Framework :: Django",
+  "Framework :: Django :: 5.2",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+]
+
+[build-system]
+requires = ["setuptools>=80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+  "build>=1.3.0",
+  "isort>=7.0.0",
+  "pytest>=8.4.2",
+  "pytest-django>=4.11.1",
+  "rich>=14.2.0",
+  "setuptools>=80.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/sadeh-congnition/django-llm-chat"
