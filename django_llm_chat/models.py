@@ -1,7 +1,6 @@
 from typing import Iterable, Self
 from django.db import models
 from django.conf import settings
-from django.contrib.auth.models import User
 
 
 class Chat(models.Model):
@@ -64,8 +63,8 @@ class LLMCall(models.Model):
     def create(cls, *messages: Iterable[Message]) -> Self:
         db_model = LLMCall.objects.create(status=LLMCall.Status.NEW)
 
-        for m in messages:
-            db_model.messages.add(m)
+        for m in messages:  # TODO optimize this to save all messages in one query
+            db_model.add_message(m)
 
         return db_model
 

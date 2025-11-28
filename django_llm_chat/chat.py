@@ -9,23 +9,35 @@ def create_litellm_user():
     return get_user_model().objects.create_user(username="litellm", password="litellm")
 
 
+def create_chat_user():
+    return get_user_model().objects.create_user(
+        username="djllmchat", password="djllmchat"
+    )
+
+
 User = get_user_model()
 
 
 @dataclass
 class Chat:
     chat_db_model: ChatDBModel
+    llm_user: object
     default_user: object
 
     @classmethod
     def create(cls) -> Self:
         try:
-            default_user = User.objects.get(username="litellm")
+            llm_user = User.objects.get(username="litellm")
         except User.DoesNotExist:
-            default_user = create_litellm_user()
+            llm_user = create_litellm_user()
+
+        try:
+            default_user = User.objects.get(username="djllmchat")
+        except User.DoesNotExist:
+            default_user = create_chat_user()
 
         db_model = ChatDBModel.objects.create()
-        return cls(db_model, default_user)
+        return cls(db_model, llm_user, default_user)
 
     def create_user_message(self, text: str, user=None) -> Message:
         if not user:
@@ -76,7 +88,7 @@ class Chat:
 
     def send_user_msg_to_llm(
         self, model_name, text: str, user=None, include_chat_history: bool = True
-    ) -> Message:
+    ) -> tuple[Message, Message, LLMCall]:
         if not user:
             user = self.default_user
 
@@ -98,10 +110,10 @@ class Chat:
         llm_call.add_response_data(response_data, input_token_count, output_token_count)
 
         llm_msg = Message.create_llm_message(
-            user=user,
+            user=self.llm_user,
             text=response_text,
             chat=self.chat_db_model,
         )
         llm_call.add_message(llm_msg)
 
-        return llm_msg
+        return llm_msg, user_msg, llm_call
