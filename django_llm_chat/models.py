@@ -46,6 +46,12 @@ class Message(models.Model):
             user=user,
         )
 
+    @classmethod
+    def create_system_message(cls, chat, text: str, user) -> Self:
+        return Message.objects.create(
+            chat=chat, text=text, type=Message.Type.SYSTEM, user=user
+        )
+
 
 class LLMCall(models.Model):
     class Status(models.TextChoices):
