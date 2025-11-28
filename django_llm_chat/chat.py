@@ -5,8 +5,14 @@ from litellm import completion
 from django.contrib.auth import get_user_model
 
 
+class DuplicateSystemMessageError(Exception):
+    pass
+
+
 def create_litellm_user():
-    return get_user_model().objects.create_user(username="litellm", password="litellm")
+    return get_user_model().objects.create_user(
+        username="djllmchat-user", password="djllmchat-user"
+    )
 
 
 def create_chat_user():
@@ -117,3 +123,11 @@ class Chat:
         llm_call.add_message(llm_msg)
 
         return llm_msg, user_msg, llm_call
+
+    def create_system_message(self, text: str, user=None) -> Message:
+        if self.chat_db_model.messages.filter(type=Message.Type.SYSTEM).exists():
+            raise DuplicateSystemMessageError("System message already exists")
+
+        if not user:
+            user = self.default_user
+        return Message.create_system_message(self.chat_db_model, text, user)

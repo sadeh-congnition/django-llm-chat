@@ -22,10 +22,10 @@ user = User.objects.create_user(username="testuser", password="12345")
 > A `Chat` can therefore have multiple users.
 
 > [!NOTE]
-> If you don't provide a user for user messages, then a default user will be created and assigned to the message.
+> If you don't provide a user for user messages, then a default user (`djllmchat-user`) will be created and assigned to the message.
 
 > [!NOTE]
-> LLM messages are linked to a default LLM user which gets created by default.
+> LLM messages get linked to a user called `djllmchat`.
 
 Now we create a `Chat`:
 
@@ -36,21 +36,37 @@ chat = Chat.create()
 
 This `Chat` will be linked to all the messages in this conversation. By default, for each new user message the whole chat history gets sent to the LLM.
 
+You can add only one system message to the whole chat:
+
+```python
+system_msg = chat.create_system_message("You are an artist!", user)
+```
+
+You can create one or more user messages and call the LLM:
+
 ```python
 from django_llm_chat.models import Message, LLMCall
 
-user_query = "Hi, tell me who you are."
+# explicitly create a user message
+first_user_msg = chat.create_user_message(text='Hi, how are you?', user=readingpal_user)
+
+user_query = "Tell me who you are."
 model_name = "ollama_chat/qwen3:4b"
 
 ai_msg: Message
 user_msg: Message
 llm_call: LLMCall
-ai_msg, user_msg = chat.send_user_msg_to_llm(
+
+# user message gets crated implicitly
+ai_msg, second_user_msg, llm_call = chat.send_user_msg_to_llm(
     model_name=model_name, text=user_query, user=user, include_chat_history=True
 )  # sends all messages in chat history to LLM
 
 print(ai_msg.text)  # prints LLM response text
 ```
+
+> [!NOTE]
+> `user` and `include_chat_history` are optional parameters.
 
 `user_msg` and `ai_message` are Django ORM model instances:
 
@@ -86,5 +102,4 @@ from django_llm_chat.model import LLMCall
 
 llm_call = LLMCall.objects.get(llm_call.id)
 print(llm_call.messages.all())
-
 ```
