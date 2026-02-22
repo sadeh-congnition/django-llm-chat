@@ -4,11 +4,11 @@ This package is for calling LLMs. It supports all providers `litellm` supports.
 
 The goal is to have persistent `Chat`s with user and LLM messages plus some metadata like token usage that `litellm` returns for each LLM call.
 
-# Installation
+## Installation
 
 TODO
 
-# Usage
+## Usage
 
 ```python
 from django.contrib.auth import get_user_model
@@ -57,7 +57,7 @@ ai_msg: Message
 user_msg: Message
 llm_call: LLMCall
 
-# user message gets crated implicitly
+# user message gets created implicitly
 ai_msg, second_user_msg, llm_call = chat.send_user_msg_to_llm(
     model_name=model_name, text=user_query, user=user, include_chat_history=True
 )  # sends all messages in chat history to LLM
