@@ -45,6 +45,24 @@
             font-size: 0.9em;
             opacity: 0.8;
         }
+        .accordion-button:not(.collapsed) {
+            background-color: #2c3034;
+            color: #f8f9fa;
+        }
+        .accordion-button:focus {
+            box-shadow: none;
+            border-color: #495057;
+        }
+        .accordion-button::after {
+            filter: invert(1);
+        }
+        .accordion-item {
+            background-color: #212529;
+            border: 1px solid #495057;
+        }
+        .accordion-body {
+            background-color: #212529;
+        }
     </style>
 </head>
 <body>

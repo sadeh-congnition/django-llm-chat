@@ -137,3 +137,7 @@ Visit `/llm-chat/` in your browser.
 - **User Messages** (Blue): Messages sent by users
 - **Assistant Messages** (Green): LLM responses  
 - **System Messages** (Gray): System prompts and instructions
+
+# Roadmap
+
+Features and tasks I'm working on will be tracked using [this kanban board](https://github.com/sadeh-congnition/kanban).
