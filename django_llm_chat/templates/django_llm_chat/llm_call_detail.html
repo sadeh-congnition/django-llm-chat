@@ -1,0 +1,110 @@
+{% extends 'django_llm_chat/base.html' %}
+
+{% block title %}LLM Call #{{ llm_call.id }} - Django LLM Chat{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Navigation and Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <a href="{% url 'django_llm_chat:llm_call_list' %}" class="btn btn-outline-secondary mb-2">
+                    <i class="bi bi-arrow-left"></i> Back to Calls
+                </a>
+                <h1 class="mb-0">
+                    <i class="bi bi-robot"></i> LLM Call #{{ llm_call.id }}
+                </h1>
+            </div>
+            <div>
+                {% if llm_call.status == 'generation_completed' %}
+                    <span class="badge bg-success status-badge fs-6">Completed</span>
+                {% elif llm_call.status == 'generation_in_progress' %}
+                    <span class="badge bg-warning status-badge fs-6">In Progress</span>
+                {% else %}
+                    <span class="badge bg-secondary status-badge fs-6">New</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Token Summary -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cpu"></i> Token Usage</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-4">
+                        <div class="p-3">
+                            <h4 class="text-primary">{{ llm_call.messages.count }}</h4>
+                            <small class="text-muted">Messages</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3">
+                            <h4 class="text-info">{{ llm_call.input_tokens_count }}</h4>
+                            <small class="text-muted">Input Tokens</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3">
+                            <h4 class="text-success">{{ llm_call.output_tokens_count }}</h4>
+                            <small class="text-muted">Output Tokens</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-chat-dots"></i> Messages</h5>
+            </div>
+            <div class="card-body">
+                {% for message in llm_call.messages.all %}
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center mb-2">
+                            {% if message.type == 'user' %}
+                                <span class="badge message-user">
+                                    <i class="bi bi-person"></i> User
+                                </span>
+                            {% elif message.type == 'assistant' %}
+                                <span class="badge message-assistant">
+                                    <i class="bi bi-robot"></i> Assistant
+                                </span>
+                            {% else %}
+                                <span class="badge message-system">
+                                    <i class="bi bi-gear"></i> System
+                                </span>
+                            {% endif %}
+                            <small class="text-muted ms-2">
+                                {{ message.date_created|date:"M d, Y H:i:s" }}
+                            </small>
+                        </div>
+                        <div class="message-content p-3 rounded bg-dark border-secondary">
+                            <pre class="mb-0">{{ message.text }}</pre>
+                        </div>
+                    </div>
+                {% empty %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-chat-dots display-4"></i>
+                        <p class="mt-2">No messages found for this call.</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Response Data (if available) -->
+        {% if llm_call.response_data %}
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-code-slash"></i> Raw Response Data</h5>
+                </div>
+                <div class="card-body">
+                    <pre class="bg-dark text-light p-3 rounded">{{ llm_call.response_data|pprint }}</pre>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

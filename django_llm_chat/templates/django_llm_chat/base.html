@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Django LLM Chat{% endblock %}</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <style>
+        .message-user {
+            background-color: #0d6efd !important;
+            color: white !important;
+        }
+        .message-assistant {
+            background-color: #198754 !important;
+            color: white !important;
+        }
+        .message-system {
+            background-color: #6c757d !important;
+            color: white !important;
+        }
+        .llm-call-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .llm-call-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .status-badge {
+            font-size: 0.8em;
+        }
+        pre {
+            background-color: #212529 !important;
+            border: 1px solid #495057 !important;
+            color: #f8f9fa !important;
+        }
+        .token-info {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg bg-dark border-bottom border-body" data-bs-theme="dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{% url 'django_llm_chat:llm_call_list' %}">
+                <i class="bi bi-robot"></i> Django LLM Chat
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'django_llm_chat:llm_call_list' %}">
+                            <i class="bi bi-list"></i> LLM Calls
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container-fluid mt-4" id="main-content">
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    {% block scripts %}
+    {% endblock %}
+</body>
+</html>

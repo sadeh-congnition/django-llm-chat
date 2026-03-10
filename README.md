@@ -103,3 +103,37 @@ from django_llm_chat.model import LLMCall
 llm_call = LLMCall.objects.get(llm_call.id)
 print(llm_call.messages.all())
 ```
+
+# Front-end Usage
+
+This package includes a front-end for viewing LLM calls and messages.
+
+## Setup
+
+Add `'django_llm_chat'` to your `INSTALLED_APPS`:
+
+```python
+INSTALLED_APPS = [
+    # ... other apps
+    'django_llm_chat',
+]
+```
+
+Include the app URLs in your main `urls.py`:
+
+```python
+from django.urls import path, include
+
+urlpatterns = [
+    # ... other paths
+    path('llm-chat/', include('django_llm_chat.urls')),
+]
+```
+
+Visit `/llm-chat/` in your browser.
+
+## Message Types
+
+- **User Messages** (Blue): Messages sent by users
+- **Assistant Messages** (Green): LLM responses  
+- **System Messages** (Gray): System prompts and instructions
