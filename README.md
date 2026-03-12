@@ -66,6 +66,22 @@ ai_msg, second_user_msg, llm_call = chat.send_user_msg_to_llm(
 print(ai_msg.text)  # prints LLM response text
 ```
 
+You can also stream responses:
+
+```python
+gen = chat.stream_user_msg_to_llm(
+    model_name=model_name, text=user_query, user=user, include_chat_history=True
+)
+
+try:
+    for chunk in gen:
+        print(chunk, end="", flush=True)
+except StopIteration as e:
+    # After the stream ends, the generator returns ORM instances
+    ai_msg, user_msg, llm_call = e.value
+    print(f"\nFinal message saved: {ai_msg.id}")
+```
+
 > [!NOTE]
 > `user` and `include_chat_history` are optional parameters.
 
@@ -143,3 +159,4 @@ Visit `/llm-chat/` in your browser.
 # Roadmap
 
 Features and tasks I'm working on will be tracked using [this kanban board](https://github.com/sadeh-congnition/kanban).
+

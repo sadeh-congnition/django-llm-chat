@@ -10,9 +10,7 @@ class DuplicateSystemMessageError(Exception):
 
 
 def create_litellm_user():
-    return get_user_model().objects.create_user(
-        username="djllmchat-user", password="djllmchat-user"
-    )
+    return get_user_model().objects.create_user(username="litellm", password="litellm")
 
 
 def create_chat_user():
@@ -108,6 +106,75 @@ class Chat:
         llm_call = self.create_llm_call(*messages)
 
         response_text, response_data = self.call_llm_via_litellm(model_name, *messages)
+
+        input_token_count = response_data["usage"]["prompt_tokens"]
+        output_token_count = response_data["usage"]["completion_tokens"]
+
+        self.add_tokens(input_token_count, output_token_count)
+        llm_call.add_response_data(response_data, input_token_count, output_token_count)
+
+        llm_msg = Message.create_llm_message(
+            user=self.llm_user,
+            text=response_text,
+            chat=self.chat_db_model,
+        )
+        llm_call.add_message(llm_msg)
+
+        return llm_msg, user_msg, llm_call
+
+    def stream_user_msg_to_llm(
+        self, model_name, text: str, user=None, include_chat_history: bool = True
+    ) -> Iterable[str]:
+        if not user:
+            user = self.default_user
+
+        user_msg: Message = self.create_user_message(text, user)
+
+        if include_chat_history:
+            messages_history = list(self.get_msg_history())
+        else:
+            messages_history = [user_msg]
+
+        llm_call = self.create_llm_call(*messages_history)
+
+        litellm_messages = []
+        for msg in messages_history:
+            litellm_messages.append({"content": msg.text, "role": msg.type})
+
+        response = completion(
+            model=model_name,
+            messages=litellm_messages,
+            stream=True,
+        )
+
+        chunks = []
+        for chunk in response:
+            chunks.append(chunk)
+            content = chunk.choices[0].delta.content or ""
+            if content:
+                yield content
+
+        import litellm
+
+        reconstructed_response = litellm.stream_chunk_builder(
+            chunks, messages=litellm_messages
+        )
+
+        message_dict = reconstructed_response.choices[0].message.to_dict()
+        response_text = reconstructed_response.choices[0].message.content
+        message_dict.pop("content")
+        message_dict.pop("role")
+
+        msg_id = reconstructed_response.id
+        model = reconstructed_response.model
+        usage = reconstructed_response.usage.to_dict()
+
+        response_data = {
+            "message": message_dict,
+            "id": msg_id,
+            "model": model,
+            "usage": usage,
+        }
 
         input_token_count = response_data["usage"]["prompt_tokens"]
         output_token_count = response_data["usage"]["completion_tokens"]
