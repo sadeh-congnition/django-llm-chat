@@ -2,6 +2,9 @@ from typing import Iterable, Self
 from dataclasses import dataclass
 from .models import Chat as ChatDBModel, Message, LLMCall
 from litellm import completion
+import requests
+import json
+import os
 from django.contrib.auth import get_user_model
 
 
@@ -58,6 +61,105 @@ class Chat:
     def create_llm_call(self, *messages: Iterable[Message]) -> LLMCall:
         return LLMCall.create(*messages)
 
+    def _prepare_litellm_messages(self, messages: Iterable[Message]) -> list[dict]:
+        litellm_messages = []
+        for msg in messages:
+            litellm_messages.append({"content": msg.text, "role": msg.type})
+        return litellm_messages
+
+    def _prepare_lmstudio_messages(self, messages: Iterable[Message]) -> list:
+        lms_messages = []
+        for msg in messages:
+            role = msg.type
+            if role == Message.Type.SYSTEM:
+                role = "system"
+            elif role == Message.Type.USER:
+                role = "user"
+            elif role == Message.Type.ASSISTANT:
+                role = "assistant"
+
+            lms_messages.append({"role": role, "content": msg.text})
+        return lms_messages
+
+    def call_llm_via_lmstudio(
+        self, model_name: str, *messages: Iterable[Message]
+    ) -> tuple[str, dict]:
+        lms_messages = self._prepare_lmstudio_messages(messages)
+
+        base_url = os.environ.get("LM_STUDIO_API_BASE", "http://localhost:1234")
+        url = f"{base_url.rstrip('/')}/v1/chat/completions"
+
+        # We'll use the OpenAI-compatible endpoint for non-streaming if possible,
+        # but the user specified /api/v1/chat for streaming.
+        # Let's stick to /api/v1/chat as requested for consistency if it supports non-streaming,
+        # or use /v1/chat/completions if it's more standard for non-streaming.
+        # The user example used /api/v1/chat with stream=True.
+
+        api_url = f"{base_url.rstrip('/')}/api/v1/chat"
+        payload = {
+            "model": model_name,
+            "messages": lms_messages,  # /api/v1/chat uses messages or input?
+            # Example used "input" and "system_prompt".
+        }
+
+        # Redoing based on user example:
+        system_msg = next(
+            (m.text for m in messages if m.type == Message.Type.SYSTEM), ""
+        )
+        user_msg = messages[-1].text if messages else ""
+
+        # Actually, if we have history, we might need to combine them or use an endpoint that supports history properly.
+        # The user's example:
+        # data = {
+        #     "model": "...",
+        #     "system_prompt": "...",
+        #     "input": "...",
+        #     "stream": True,
+        # }
+
+        data = {
+            "model": model_name,
+            "system_prompt": system_msg,
+            "input": user_msg,
+            "stream": False,
+        }
+
+        response = requests.post(api_url, json=data)
+        response.raise_for_status()
+        result = response.json()
+
+        # Based on the user example's 'chat.end' event structure:
+        # {"type":"chat.end","result":{"model_instance_id":"...","output":[{"type":"message","content":"..."}],"stats":{...}}}
+
+        # For non-streaming, the response might be different or we might have to simulate it if we want tokens.
+        # Usually /api/v1/chat returns the final result if stream=False.
+
+        output_content = ""
+        if "output" in result:
+            output_content = "".join(
+                [
+                    o.get("content", "")
+                    for o in result["output"]
+                    if o.get("type") == "message"
+                ]
+            )
+
+        stats = result.get("stats", {})
+        prompt_tokens = stats.get("input_tokens", 0)
+        completion_tokens = stats.get("total_output_tokens", 0)
+
+        response_data = {
+            "message": {"content": output_content},
+            "id": f"lms-{result.get('response_id', 'unknown')}",
+            "model": model_name,
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+            },
+        }
+        return output_content, response_data
+
     def call_llm_via_litellm(
         self, model_name: str, *messages: Iterable[Message]
     ) -> tuple[str, dict]:
@@ -91,21 +193,33 @@ class Chat:
         self.chat_db_model.add_token_counts(input_token_count, output_token_count)
 
     def send_user_msg_to_llm(
-        self, model_name, text: str, user=None, include_chat_history: bool = True
+        self,
+        model_name,
+        text: str,
+        user=None,
+        include_chat_history: bool = True,
+        backend: str = "litellm",
     ) -> tuple[Message, Message, LLMCall]:
         if not user:
             user = self.default_user
 
-        user_msg: ChatDBModel = self.create_user_message(text, user)
+        user_msg: Message = self.create_user_message(text, user)
 
         if include_chat_history:
-            messages = self.get_msg_history()
+            messages = list(self.get_msg_history())
         else:
             messages = [user_msg]
 
         llm_call = self.create_llm_call(*messages)
 
-        response_text, response_data = self.call_llm_via_litellm(model_name, *messages)
+        if backend == "lmstudio":
+            response_text, response_data = self.call_llm_via_lmstudio(
+                model_name, *messages
+            )
+        else:
+            response_text, response_data = self.call_llm_via_litellm(
+                model_name, *messages
+            )
 
         input_token_count = response_data["usage"]["prompt_tokens"]
         output_token_count = response_data["usage"]["completion_tokens"]
@@ -123,7 +237,12 @@ class Chat:
         return llm_msg, user_msg, llm_call
 
     def stream_user_msg_to_llm(
-        self, model_name, text: str, user=None, include_chat_history: bool = True
+        self,
+        model_name,
+        text: str,
+        user=None,
+        include_chat_history: bool = True,
+        backend: str = "litellm",
     ) -> Iterable[str]:
         if not user:
             user = self.default_user
@@ -137,44 +256,108 @@ class Chat:
 
         llm_call = self.create_llm_call(*messages_history)
 
-        litellm_messages = []
-        for msg in messages_history:
-            litellm_messages.append({"content": msg.text, "role": msg.type})
+        if backend == "lmstudio":
+            base_url = os.environ.get("LM_STUDIO_API_BASE", "http://localhost:1234")
+            api_url = f"{base_url.rstrip('/')}/api/v1/chat"
 
-        response = completion(
-            model=model_name,
-            messages=litellm_messages,
-            stream=True,
-        )
+            system_msg = next(
+                (m.text for m in messages_history if m.type == Message.Type.SYSTEM), ""
+            )
+            user_msg = next(
+                (
+                    m.text
+                    for m in reversed(messages_history)
+                    if m.type == Message.Type.USER
+                ),
+                "",
+            )
 
-        chunks = []
-        for chunk in response:
-            chunks.append(chunk)
-            content = chunk.choices[0].delta.content or ""
-            if content:
-                yield content
+            data = {
+                "model": model_name,
+                "system_prompt": system_msg,
+                "input": user_msg,
+                "stream": True,
+            }
 
-        import litellm
+            response_text = ""
+            prompt_tokens = 0
+            completion_tokens = 0
+            response_id = "unknown"
 
-        reconstructed_response = litellm.stream_chunk_builder(
-            chunks, messages=litellm_messages
-        )
+            s = requests.Session()
+            with s.post(api_url, json=data, stream=True) as resp:
+                resp.raise_for_status()
+                for line in resp.iter_lines():
+                    if not line:
+                        continue
 
-        message_dict = reconstructed_response.choices[0].message.to_dict()
-        response_text = reconstructed_response.choices[0].message.content
-        message_dict.pop("content")
-        message_dict.pop("role")
+                    line_str = line.decode("utf-8")
+                    if line_str.startswith("data: "):
+                        data_str = line_str[6:]
+                        try:
+                            event_data = json.loads(data_str)
+                            event_type = event_data.get("type")
 
-        msg_id = reconstructed_response.id
-        model = reconstructed_response.model
-        usage = reconstructed_response.usage.to_dict()
+                            if event_type == "message.delta":
+                                content = event_data.get("content", "")
+                                response_text += content
+                                yield content
+                            elif event_type == "chat.end":
+                                result_data = event_data.get("result", {})
+                                stats = result_data.get("stats", {})
+                                prompt_tokens = stats.get("input_tokens", 0)
+                                completion_tokens = stats.get("total_output_tokens", 0)
+                                response_id = result_data.get("response_id", "unknown")
+                        except json.JSONDecodeError:
+                            continue
 
-        response_data = {
-            "message": message_dict,
-            "id": msg_id,
-            "model": model,
-            "usage": usage,
-        }
+            response_data = {
+                "message": {"content": response_text},
+                "id": f"lms-{response_id}",
+                "model": model_name,
+                "usage": {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                },
+            }
+        else:
+            litellm_messages = self._prepare_litellm_messages(messages_history)
+
+            response = completion(
+                model=model_name,
+                messages=litellm_messages,
+                stream=True,
+            )
+
+            chunks = []
+            for chunk in response:
+                chunks.append(chunk)
+                content = chunk.choices[0].delta.content or ""
+                if content:
+                    yield content
+
+            import litellm
+
+            reconstructed_response = litellm.stream_chunk_builder(
+                chunks, messages=litellm_messages
+            )
+
+            message_dict = reconstructed_response.choices[0].message.to_dict()
+            response_text = reconstructed_response.choices[0].message.content
+            message_dict.pop("content")
+            message_dict.pop("role")
+
+            msg_id = reconstructed_response.id
+            model = reconstructed_response.model
+            usage = reconstructed_response.usage.to_dict()
+
+            response_data = {
+                "message": message_dict,
+                "id": msg_id,
+                "model": model,
+                "usage": usage,
+            }
 
         input_token_count = response_data["usage"]["prompt_tokens"]
         output_token_count = response_data["usage"]["completion_tokens"]
