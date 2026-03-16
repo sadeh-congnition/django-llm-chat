@@ -1,6 +1,7 @@
 # :fire: django-llm-chat :fire:
 
 This package is for calling LLMs. It supports all providers `litellm` supports.
+It also supports SHA-256 based caching of LLM calls to save costs and reduce latency.
 
 The goal is to have persistent `Chat`s with user and LLM messages plus some metadata like token usage that `litellm` returns for each LLM call.
 
@@ -61,7 +62,7 @@ llm_call: LLMCall
 
 # NOTE: user message gets created implicitly and all messages in chat history are sent to LLM
 ai_msg, second_user_msg, llm_call = chat.send_user_msg_to_llm(
-    model_name=model_name, text=user_query, user=user, include_chat_history=True
+    model_name=model_name, text=user_query, user=user, include_chat_history=True, use_cache=True
 )
 print(ai_msg.text)  # prints LLM response text
 ```
@@ -70,7 +71,7 @@ You can also stream responses:
 
 ```python
 gen = chat.stream_user_msg_to_llm(
-    model_name=model_name, text=user_query, user=user, include_chat_history=True
+    model_name=model_name, text=user_query, user=user, include_chat_history=True, use_cache=True
 )
 
 try:
@@ -83,7 +84,7 @@ except StopIteration as e:
 ```
 
 > [!NOTE]
-> `user` and `include_chat_history` are optional parameters.
+> `user` and `include_chat_history` are optional parameters. Caching is not enabled by default.
 
 `user_msg` and `ai_message` are Django ORM model instances:
 
@@ -159,4 +160,3 @@ Visit `/llm-chat/` in your browser.
 # Roadmap
 
 Features and tasks I'm working on will be tracked using [this kanban board](https://github.com/sadeh-congnition/kanban).
-

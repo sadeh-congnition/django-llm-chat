@@ -1,11 +1,14 @@
-from typing import Iterable, Self
-from dataclasses import dataclass
-from .models import Chat as ChatDBModel, Message, LLMCall
-from litellm import completion
-import requests
+import hashlib
 import json
 import os
+from dataclasses import dataclass
+from typing import Iterable, Self
+
+import litellm
 from django.contrib.auth import get_user_model
+
+from .models import Chat as ChatDBModel
+from .models import LLMCache, LLMCall, Message
 
 
 class DuplicateSystemMessageError(Exception):
@@ -58,6 +61,36 @@ class Chat:
     def get_msg_history(self) -> Iterable[Message]:
         return self.chat_db_model.messages.order_by("date_created").all()
 
+    def _compute_cache_key(self, model_name: str, messages: Iterable[Message]) -> str:
+        msg_data = [{"role": m.type, "content": m.text} for m in messages]
+        key_data = {
+            "model": model_name,
+            "messages": msg_data,
+        }
+        key_str = json.dumps(key_data, sort_keys=True)
+        return hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+
+    def _lookup_cache(self, cache_key: str) -> LLMCache | None:
+        try:
+            cache_item = LLMCache.objects.get(cache_key=cache_key)
+            cache_item.hit_count += 1
+            cache_item.save(update_fields=["hit_count"])
+            return cache_item
+        except LLMCache.DoesNotExist:
+            return None
+
+    def _save_to_cache(
+        self, cache_key: str, model_name: str, response_text: str, response_data: dict
+    ):
+        LLMCache.objects.get_or_create(
+            cache_key=cache_key,
+            defaults={
+                "model_name": model_name,
+                "response_text": response_text,
+                "response_data": response_data,
+            },
+        )
+
     def create_llm_call(self, *messages: Iterable[Message]) -> LLMCall:
         return LLMCall.create(*messages)
 
@@ -82,8 +115,19 @@ class Chat:
         return lms_messages
 
     def call_llm_via_lmstudio(
-        self, model_name: str, *messages: Iterable[Message]
+        self, model_name: str, *messages: Iterable[Message], cache_key: str = None
     ) -> tuple[str, dict]:
+        if cache_key:
+            cache_item = self._lookup_cache(cache_key)
+            if cache_item:
+                response_data = cache_item.response_data.copy()
+                response_data["usage"] = {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                }
+                return cache_item.response_text, response_data
+
         lms_messages = self._prepare_lmstudio_messages(messages)
 
         base_url = os.environ.get("LM_STUDIO_API_BASE", "http://localhost:1234")
@@ -158,11 +202,26 @@ class Chat:
                 "total_tokens": prompt_tokens + completion_tokens,
             },
         }
+
+        if cache_key:
+            self._save_to_cache(cache_key, model_name, output_content, response_data)
+
         return output_content, response_data
 
     def call_llm_via_litellm(
-        self, model_name: str, *messages: Iterable[Message]
+        self, model_name: str, *messages: Iterable[Message], cache_key: str = None
     ) -> tuple[str, dict]:
+        if cache_key:
+            cache_item = self._lookup_cache(cache_key)
+            if cache_item:
+                response_data = cache_item.response_data.copy()
+                response_data["usage"] = {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                }
+                return cache_item.response_text, response_data
+
         litellm_messages = []
         for msg in messages:
             litellm_messages.append({"content": msg.text, "role": msg.type})
@@ -187,6 +246,10 @@ class Chat:
             "model": model,
             "usage": usage,
         }
+
+        if cache_key:
+            self._save_to_cache(cache_key, model_name, response_text, response_data)
+
         return response_text, response_data
 
     def add_tokens(self, input_token_count: int, output_token_count: int):
@@ -199,6 +262,7 @@ class Chat:
         user=None,
         include_chat_history: bool = True,
         backend: str = "litellm",
+        use_cache: bool = False,
     ) -> tuple[Message, Message, LLMCall]:
         if not user:
             user = self.default_user
@@ -212,13 +276,17 @@ class Chat:
 
         llm_call = self.create_llm_call(*messages)
 
+        cache_key = None
+        if use_cache:
+            cache_key = self._compute_cache_key(model_name, messages)
+
         if backend == "lmstudio":
             response_text, response_data = self.call_llm_via_lmstudio(
-                model_name, *messages
+                model_name, *messages, cache_key=cache_key
             )
         else:
             response_text, response_data = self.call_llm_via_litellm(
-                model_name, *messages
+                model_name, *messages, cache_key=cache_key
             )
 
         input_token_count = response_data["usage"]["prompt_tokens"]
@@ -243,6 +311,7 @@ class Chat:
         user=None,
         include_chat_history: bool = True,
         backend: str = "litellm",
+        use_cache: bool = False,
     ) -> Iterable[str]:
         if not user:
             user = self.default_user
@@ -256,6 +325,32 @@ class Chat:
 
         llm_call = self.create_llm_call(*messages_history)
 
+        cache_key = None
+        if use_cache:
+            cache_key = self._compute_cache_key(model_name, messages_history)
+            cache_item = self._lookup_cache(cache_key)
+            if cache_item:
+                response_text = cache_item.response_text
+                response_data = cache_item.response_data.copy()
+                response_data["usage"] = {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                }
+
+                self.add_tokens(0, 0)
+                llm_call.add_response_data(response_data, 0, 0)
+
+                llm_msg = Message.create_llm_message(
+                    user=self.llm_user,
+                    text=response_text,
+                    chat=self.chat_db_model,
+                )
+                llm_call.add_message(llm_msg)
+
+                yield response_text
+                return
+
         if backend == "lmstudio":
             base_url = os.environ.get("LM_STUDIO_API_BASE", "http://localhost:1234")
             api_url = f"{base_url.rstrip('/')}/api/v1/chat"
@@ -263,7 +358,7 @@ class Chat:
             system_msg = next(
                 (m.text for m in messages_history if m.type == Message.Type.SYSTEM), ""
             )
-            user_msg = next(
+            user_msg_text = next(
                 (
                     m.text
                     for m in reversed(messages_history)
@@ -275,7 +370,7 @@ class Chat:
             data = {
                 "model": model_name,
                 "system_prompt": system_msg,
-                "input": user_msg,
+                "input": user_msg_text,
                 "stream": True,
             }
 
@@ -321,6 +416,9 @@ class Chat:
                     "total_tokens": prompt_tokens + completion_tokens,
                 },
             }
+
+            if cache_key:
+                self._save_to_cache(cache_key, model_name, response_text, response_data)
         else:
             litellm_messages = self._prepare_litellm_messages(messages_history)
 
@@ -336,8 +434,6 @@ class Chat:
                 content = chunk.choices[0].delta.content or ""
                 if content:
                     yield content
-
-            import litellm
 
             reconstructed_response = litellm.stream_chunk_builder(
                 chunks, messages=litellm_messages
@@ -358,6 +454,9 @@ class Chat:
                 "model": model,
                 "usage": usage,
             }
+
+            if cache_key:
+                self._save_to_cache(cache_key, model_name, response_text, response_data)
 
         input_token_count = response_data["usage"]["prompt_tokens"]
         output_token_count = response_data["usage"]["completion_tokens"]

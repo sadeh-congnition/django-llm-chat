@@ -92,3 +92,16 @@ class LLMCall(models.Model):
             "status": self.status,
             "response_data": self.response_data,
         }
+
+
+class LLMCache(models.Model):
+    cache_key = models.CharField(max_length=64, unique=True, db_index=True)
+    model_name = models.CharField(max_length=255)
+    response_text = models.TextField()
+    response_data = models.JSONField()
+    hit_count = models.IntegerField(default=0)
+    date_created = models.DateTimeField(auto_now_add=True)
+    date_updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.model_name} - {self.cache_key[:8]}"
