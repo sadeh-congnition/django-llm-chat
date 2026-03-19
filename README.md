@@ -62,7 +62,13 @@ llm_call: LLMCall
 
 # NOTE: user message gets created implicitly and all messages in chat history are sent to LLM
 ai_msg, second_user_msg, llm_call = chat.send_user_msg_to_llm(
-    model_name=model_name, text=user_query, user=user, include_chat_history=True, use_cache=True
+    model_name=model_name,
+    text=user_query,
+    user=user,
+    include_chat_history=True,
+    use_cache=True,
+    temperature=0.2,
+    max_tokens=512,
 )
 print(ai_msg.text)  # prints LLM response text
 ```
@@ -71,7 +77,13 @@ You can also stream responses:
 
 ```python
 gen = chat.stream_user_msg_to_llm(
-    model_name=model_name, text=user_query, user=user, include_chat_history=True, use_cache=True
+    model_name=model_name,
+    text=user_query,
+    user=user,
+    include_chat_history=True,
+    use_cache=True,
+    temperature=0.2,
+    max_tokens=512,
 )
 
 try:
@@ -84,7 +96,7 @@ except StopIteration as e:
 ```
 
 > [!NOTE]
-> `user` and `include_chat_history` are optional parameters. Caching is not enabled by default.
+> `user`, `include_chat_history`, `temperature`, and `max_tokens` are optional parameters. Caching is not enabled by default.
 
 `user_msg` and `ai_message` are Django ORM model instances:
 

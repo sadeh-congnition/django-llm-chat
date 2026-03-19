@@ -61,11 +61,19 @@ class Chat:
     def get_msg_history(self) -> Iterable[Message]:
         return self.chat_db_model.messages.order_by("date_created").all()
 
-    def _compute_cache_key(self, model_name: str, messages: Iterable[Message]) -> str:
+    def _compute_cache_key(
+        self,
+        model_name: str,
+        messages: Iterable[Message],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
         msg_data = [{"role": m.type, "content": m.text} for m in messages]
         key_data = {
             "model": model_name,
             "messages": msg_data,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
         }
         key_str = json.dumps(key_data, sort_keys=True)
         return hashlib.sha256(key_str.encode("utf-8")).hexdigest()
@@ -115,7 +123,12 @@ class Chat:
         return lms_messages
 
     def call_llm_via_lmstudio(
-        self, model_name: str, *messages: Iterable[Message], cache_key: str = None
+        self,
+        model_name: str,
+        *messages: Iterable[Message],
+        cache_key: str = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> tuple[str, dict]:
         if cache_key:
             cache_item = self._lookup_cache(cache_key)
@@ -167,6 +180,10 @@ class Chat:
             "input": user_msg,
             "stream": False,
         }
+        if temperature is not None:
+            data["temperature"] = temperature
+        if max_tokens is not None:
+            data["max_tokens"] = max_tokens
 
         response = requests.post(api_url, json=data)
         response.raise_for_status()
@@ -209,7 +226,12 @@ class Chat:
         return output_content, response_data
 
     def call_llm_via_litellm(
-        self, model_name: str, *messages: Iterable[Message], cache_key: str = None
+        self,
+        model_name: str,
+        *messages: Iterable[Message],
+        cache_key: str = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> tuple[str, dict]:
         if cache_key:
             cache_item = self._lookup_cache(cache_key)
@@ -226,9 +248,16 @@ class Chat:
         for msg in messages:
             litellm_messages.append({"content": msg.text, "role": msg.type})
 
+        completion_kwargs = {}
+        if temperature is not None:
+            completion_kwargs["temperature"] = temperature
+        if max_tokens is not None:
+            completion_kwargs["max_tokens"] = max_tokens
+
         response = completion(
             model=model_name,
             messages=litellm_messages,
+            **completion_kwargs,
         )
 
         message = response.choices[0].message.to_dict()
@@ -263,6 +292,8 @@ class Chat:
         include_chat_history: bool = True,
         backend: str = "litellm",
         use_cache: bool = False,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> tuple[Message, Message, LLMCall]:
         if not user:
             user = self.default_user
@@ -278,15 +309,28 @@ class Chat:
 
         cache_key = None
         if use_cache:
-            cache_key = self._compute_cache_key(model_name, messages)
+            cache_key = self._compute_cache_key(
+                model_name,
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
 
         if backend == "lmstudio":
             response_text, response_data = self.call_llm_via_lmstudio(
-                model_name, *messages, cache_key=cache_key
+                model_name,
+                *messages,
+                cache_key=cache_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
         else:
             response_text, response_data = self.call_llm_via_litellm(
-                model_name, *messages, cache_key=cache_key
+                model_name,
+                *messages,
+                cache_key=cache_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
 
         input_token_count = response_data["usage"]["prompt_tokens"]
@@ -312,6 +356,8 @@ class Chat:
         include_chat_history: bool = True,
         backend: str = "litellm",
         use_cache: bool = False,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> Iterable[str]:
         if not user:
             user = self.default_user
@@ -327,7 +373,12 @@ class Chat:
 
         cache_key = None
         if use_cache:
-            cache_key = self._compute_cache_key(model_name, messages_history)
+            cache_key = self._compute_cache_key(
+                model_name,
+                messages_history,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
             cache_item = self._lookup_cache(cache_key)
             if cache_item:
                 response_text = cache_item.response_text
@@ -373,6 +424,10 @@ class Chat:
                 "input": user_msg_text,
                 "stream": True,
             }
+            if temperature is not None:
+                data["temperature"] = temperature
+            if max_tokens is not None:
+                data["max_tokens"] = max_tokens
 
             response_text = ""
             prompt_tokens = 0
@@ -422,10 +477,17 @@ class Chat:
         else:
             litellm_messages = self._prepare_litellm_messages(messages_history)
 
+            completion_kwargs = {}
+            if temperature is not None:
+                completion_kwargs["temperature"] = temperature
+            if max_tokens is not None:
+                completion_kwargs["max_tokens"] = max_tokens
+
             response = completion(
                 model=model_name,
                 messages=litellm_messages,
                 stream=True,
+                **completion_kwargs,
             )
 
             chunks = []
