@@ -52,8 +52,8 @@ class Chat:
     def add_tokens(self, input_token_count: int, output_token_count: int):
         self.chat_db_model.add_token_counts(input_token_count, output_token_count)
 
-    def _get_backend_provider(self, backend: str):
-        if backend == "lmstudio":
+    def _get_backend_provider(self, model_name: str):
+        if model_name.startswith("lm_studio"):
             return LMStudioProvider()
         return LiteLLMProvider()
 
@@ -64,7 +64,6 @@ class Chat:
         message: str,  # TODO: in README mention this is the only thing you need if you send only one message
         user: object,
         include_chat_history: bool = True,
-        backend: str = "litellm",  # TODO: this should be an Enum
         use_cache: bool = False,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -90,7 +89,7 @@ class Chat:
                     "total_tokens": 0,
                 }
             else:
-                provider = self._get_backend_provider(backend)
+                provider = self._get_backend_provider(model_name)
                 response_text, response_data = provider.generate(
                     model_name, messages, temperature=temperature, max_tokens=max_tokens
                 )
@@ -98,7 +97,7 @@ class Chat:
                     cache_key, model_name, response_text, response_data
                 )
         else:
-            provider = self._get_backend_provider(backend)
+            provider = self._get_backend_provider(model_name)
             response_text, response_data = provider.generate(
                 model_name, messages, temperature=temperature, max_tokens=max_tokens
             )
@@ -128,7 +127,6 @@ class Chat:
         message: str,
         user: object,
         include_chat_history: bool = True,
-        backend: str = "litellm",
         use_cache: bool = False,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -174,7 +172,7 @@ class Chat:
                 yield response_text
                 return
 
-        provider = self._get_backend_provider(backend)
+        provider = self._get_backend_provider(model_name)
         response_text = ""
         response_data = {}
 
