@@ -16,6 +16,17 @@ INSTALLED_APPS = [
     "django_llm_chat",
 ]
 
+ROOT_URLCONF = "django_llm_chat.tests.urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {"context_processors": []},
+    }
+]
+
 SECRET_KEY = "test-secret-key-for-streaming-tests-only"
 USE_TZ = True
 
