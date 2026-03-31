@@ -10,12 +10,12 @@ class ChatAdmin(admin.ModelAdmin):
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ("id", "user", "chat", "type", "text")
+    list_display = ("id", "user", "chat", "type", "text", "metadata")
 
 
 @admin.register(LLMCall)
 class LLMCallAdmin(admin.ModelAdmin):
-    list_display = ("id", "status", "response_data")
+    list_display = ("id", "status", "request_data", "response_data", "error_data")
 
 
 @admin.register(LLMCache)

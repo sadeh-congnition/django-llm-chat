@@ -1,6 +1,5 @@
-import json
 from unittest.mock import patch, MagicMock
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from pydantic import BaseModel
 from django.contrib.auth import get_user_model
 from django_llm_chat.chat import Chat

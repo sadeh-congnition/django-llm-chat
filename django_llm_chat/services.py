@@ -7,6 +7,36 @@ from .models import LLMCache, Message
 
 class LLMCacheService:
     @staticmethod
+    def _normalize_for_cache(value):
+        if isinstance(value, type) and issubclass(value, BaseModel):
+            return {
+                "__pydantic_model__": value.__name__,
+                "schema": value.model_json_schema(),
+            }
+        if isinstance(value, BaseModel):
+            return value.model_dump(mode="json")
+        if isinstance(value, Message):
+            return {
+                "role": value.type,
+                "content": value.text,
+                "metadata": value.metadata,
+            }
+        if isinstance(value, dict):
+            return {
+                str(key): LLMCacheService._normalize_for_cache(val)
+                for key, val in sorted(value.items())
+            }
+        if isinstance(value, (list, tuple)):
+            return [LLMCacheService._normalize_for_cache(item) for item in value]
+        return value
+
+    @staticmethod
+    def compute_request_cache_key(request_data: dict) -> str:
+        normalized = LLMCacheService._normalize_for_cache(request_data)
+        key_str = json.dumps(normalized, sort_keys=True)
+        return hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+
+    @staticmethod
     def compute_cache_key(
         model_name: str,
         messages: Iterable[Message],
@@ -14,20 +44,20 @@ class LLMCacheService:
         max_tokens: int | None = None,
         output_model: type[BaseModel] | None = None,
     ) -> str:
-        msg_data = [{"role": m.type, "content": m.text} for m in messages]
-        key_data = {
-            "model": model_name,
-            "messages": msg_data,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "output_model": (
-                json.dumps(output_model.model_json_schema())
-                if output_model is not None
-                else None
-            ),
-        }
-        key_str = json.dumps(key_data, sort_keys=True)
-        return hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+        msg_data = list(messages)
+        return LLMCacheService.compute_request_cache_key(
+            {
+                "model": model_name,
+                "messages": msg_data,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "output_model": (
+                    output_model.model_json_schema()
+                    if output_model is not None
+                    else None
+                ),
+            }
+        )
 
     @staticmethod
     def lookup_cache(cache_key: str) -> LLMCache | None:

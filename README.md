@@ -95,6 +95,34 @@ except StopIteration as e:
 > [!NOTE]
 > `include_chat_history`, `temperature`, and `max_tokens` are optional parameters. Caching is not enabled by default.
 
+## DSPy Usage
+
+DSPy integration is available as an optional extra:
+
+```bash
+pip install "django-llm-chat[dspy]"
+```
+
+Use `DSPyChat` when you want DSPy calls to persist through the existing `Chat`, `Message`, and `LLMCall` tables without changing the current `Chat` API:
+
+```python
+import dspy
+
+from django_llm_chat.dspy_chat import DSPyChat
+
+dspy_chat = DSPyChat.create(project=None)
+lm = dspy_chat.as_lm(
+    model="openai/gpt-4o-mini",
+    user=user,
+    use_cache=True,
+    temperature=0.2,
+)
+
+dspy.configure(lm=lm)
+```
+
+Each DSPy request message is stored as a `Message` in the bound chat, the request `LLMCall` is linked to those same `Message` rows, and the final assistant output is persisted as another `Message` linked to the same `LLMCall`.
+
 `user_msg` and `ai_message` are Django ORM model instances:
 
 ```python
